@@ -11,7 +11,7 @@ const LOW_OPTIMIZER_COMPILER_SETTINGS = {
     evmVersion: 'istanbul',
     optimizer: {
       enabled: true,
-      runs: 2_000,
+      runs: 1_000,
     },
     metadata: {
       bytecodeHash: 'none',
@@ -25,7 +25,7 @@ const LOWEST_OPTIMIZER_COMPILER_SETTINGS = {
     evmVersion: 'istanbul',
     optimizer: {
       enabled: true,
-      runs: 1_000,
+      runs: 200,
     },
     metadata: {
       bytecodeHash: 'none',
@@ -143,14 +143,11 @@ const config: HardhatUserConfig = {
 
       // periphery
       'contracts/periphery/NonfungiblePositionManager.sol':
-        LOW_OPTIMIZER_COMPILER_SETTINGS,
+        LOWEST_OPTIMIZER_COMPILER_SETTINGS,
       'contracts/periphery/NonfungibleTokenPositionDescriptor.sol':
-        LOWEST_OPTIMIZER_COMPILER_SETTINGS,
+        LOW_OPTIMIZER_COMPILER_SETTINGS,
       'contracts/periphery/libraries/NFTDescriptor.sol':
-        LOWEST_OPTIMIZER_COMPILER_SETTINGS,
-
-      'contracts/periphery/test/NonfungiblePositionManagerTest.sol':
-        POOL_COMPILER_SETTINGS,
+        LOW_OPTIMIZER_COMPILER_SETTINGS,
 
       'contracts/periphery/test/NonfungiblePositionManagerTest.sol': v0_7_6,
       'contracts/external/WETH.sol': v0_8_16,

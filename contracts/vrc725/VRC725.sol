@@ -5,15 +5,18 @@ import {ERC165} from "./libraries/ERC165.sol";
 import {IERC4494} from "./interfaces/IERC4494.sol";
 import {IVRC725} from "./interfaces/IVRC725.sol";
 
-import "./libraries/SignatureChecker.sol";
 import "./libraries/ECDSA.sol";
+import "./libraries/SignatureChecker.sol";
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Metadata.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
 import '@openzeppelin/contracts/utils/Address.sol';
 import '@openzeppelin/contracts/utils/Context.sol';
+import '@openzeppelin/contracts/utils/EnumerableSet.sol';
+import '@openzeppelin/contracts/utils/EnumerableMap.sol';
 import '@openzeppelin/contracts/utils/Strings.sol';
 
 /**
@@ -23,6 +26,8 @@ import '@openzeppelin/contracts/utils/Strings.sol';
  */
 abstract contract VRC725 is ERC165, IVRC725 {
     using Address for address;
+    using EnumerableSet for EnumerableSet.UintSet;
+    using EnumerableMap for EnumerableMap.UintToAddressMap;
     using Strings for uint256;
 
     // Mapping owner address to token count
@@ -65,8 +70,11 @@ abstract contract VRC725 is ERC165, IVRC725 {
     // Token symbol
     string private _symbol;
 
-    // Mapping from token ID to owner address
-    mapping(uint256 => address) private _owners;
+    // Mapping from holder address to their (enumerable) set of owned tokens
+    mapping (address => EnumerableSet.UintSet) private _holderTokens;
+
+    // Enumerable mapping from token ids to their owners
+    EnumerableMap.UintToAddressMap private _tokenOwners;
 
     // Mapping from token ID to approved address
     mapping(uint256 => address) private _tokenApprovals;
@@ -138,6 +146,7 @@ abstract contract VRC725 is ERC165, IVRC725 {
     function supportsInterface(bytes4 interfaceId) public view virtual override(ERC165, IERC165) returns (bool) {
         return
             interfaceId == type(IERC721).interfaceId ||
+            interfaceId == type(IERC721Enumerable).interfaceId ||
             interfaceId == type(IERC721Metadata).interfaceId ||
             interfaceId == type(IERC4494).interfaceId ||
             interfaceId == type(IVRC725).interfaceId ||
@@ -192,6 +201,29 @@ abstract contract VRC725 is ERC165, IVRC725 {
      */
     function _baseURI() internal view virtual returns (string memory) {
         return "";
+    }
+
+    /**
+     * @dev See {IERC721Enumerable-tokenOfOwnerByIndex}.
+     */
+    function tokenOfOwnerByIndex(address owner_, uint256 index) public view virtual override returns (uint256) {
+        return _holderTokens[owner_].at(index);
+    }
+
+    /**
+     * @dev See {IERC721Enumerable-totalSupply}.
+     */
+    function totalSupply() public view virtual override returns (uint256) {
+        // _tokenOwners are indexed by tokenIds, so .length() returns the number of tokenIds
+        return _tokenOwners.length();
+    }
+
+    /**
+     * @dev See {IERC721Enumerable-tokenByIndex}.
+     */
+    function tokenByIndex(uint256 index) public view virtual override returns (uint256) {
+        (uint256 tokenId, ) = _tokenOwners.at(index);
+        return tokenId;
     }
 
     /**
@@ -341,7 +373,7 @@ abstract contract VRC725 is ERC165, IVRC725 {
      * @dev Returns the owner of the `tokenId`. Does NOT revert if token doesn't exist
      */
     function _ownerOf(uint256 tokenId) internal view virtual returns (address) {
-        return _owners[tokenId];
+        return _tokenOwners.get(tokenId, "ERC721: owner query for nonexistent token");
     }
 
     /**
@@ -353,7 +385,7 @@ abstract contract VRC725 is ERC165, IVRC725 {
      * and stop existing when they are burned (`_burn`).
      */
     function _exists(uint256 tokenId) internal view virtual returns (bool) {
-        return _ownerOf(tokenId) != address(0);
+        return _tokenOwners.contains(tokenId);
     }
 
     /**
@@ -425,7 +457,9 @@ abstract contract VRC725 is ERC165, IVRC725 {
         // The ERC fails to describe this case.
         _balances[to] += 1;
 
-        _owners[tokenId] = to;
+        _holderTokens[to].add(tokenId);
+
+        _tokenOwners.set(tokenId, to);
 
         emit Transfer(address(0), to, tokenId);
 
@@ -457,7 +491,10 @@ abstract contract VRC725 is ERC165, IVRC725 {
         // Cannot overflow, as that would require more tokens to be burned/transferred
         // out than the owner initially received through minting and transferring in.
         _balances[owner_] -= 1;
-        delete _owners[tokenId];
+
+        _holderTokens[owner_].remove(tokenId);
+
+        _tokenOwners.remove(tokenId);
 
         emit Transfer(owner_, address(0), tokenId);
 
@@ -498,7 +535,11 @@ abstract contract VRC725 is ERC165, IVRC725 {
         // all 2**256 token ids to be minted, which in practice is impossible.
         _balances[from] -= 1;
         _balances[to] += 1;
-        _owners[tokenId] = to;
+
+        _holderTokens[from].remove(tokenId);
+        _holderTokens[to].add(tokenId);
+
+        _tokenOwners.set(tokenId, to);
 
         // increment nonce using for permit
         _incrementNonce(tokenId);
