@@ -76,7 +76,8 @@ const config: HardhatUserConfig = {
       allowUnlimitedContractSize: false,
     },
     'tomo-mainnet': {
-      url: 'https://rpc.viction.xyz',
+      url: 'https://viction.blockpi.network/v1/rpc/public',
+      // url: 'https://rpc.viction.xyz',
       accounts:
         process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
     },
