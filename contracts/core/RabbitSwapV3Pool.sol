@@ -768,9 +768,11 @@ contract RabbitSwapV3Pool is IRabbitSwapV3Pool, NoDelegateCall {
         if (zeroForOne) {
             feeGrowthGlobal0X128 = state.feeGrowthGlobalX128;
             if (state.protocolFee > 0) protocolFees.token0 += state.protocolFee;
+            protocolFeesToken0 = state.protocolFee;
         } else {
             feeGrowthGlobal1X128 = state.feeGrowthGlobalX128;
             if (state.protocolFee > 0) protocolFees.token1 += state.protocolFee;
+            protocolFeesToken1 = state.protocolFee;
         }
 
         (amount0, amount1) = zeroForOne == exactInput
