@@ -247,10 +247,8 @@ contract SwapRouter is
 
     /**
      * @notice Calculate fee required for action related to this token
-     * @param value Amount of fee
      */
-    function _estimateFee(uint256 value) internal view override returns (uint256) {
-        value;
+    function _estimateFee(uint256 /* value */) internal view override returns (uint256) {
         return minFee();
     }
 }

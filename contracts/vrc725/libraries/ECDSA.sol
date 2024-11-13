@@ -136,8 +136,7 @@ library ECDSA {
     /**
      * @dev Optionally reverts with the corresponding custom error according to the `error` argument provided.
      */
-    function _throwError(RecoverError error, bytes32 errorArg) private pure {
-        errorArg;
+    function _throwError(RecoverError error, bytes32 /* errorArg */) private pure {
         require(error == RecoverError.NoError, error == RecoverError.InvalidSignature ? 
             "ECDSA: invalid signature" :
             error == RecoverError.InvalidSignatureLength ? 
