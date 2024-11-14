@@ -370,7 +370,7 @@ abstract contract VRC725 is ERC165, IVRC725 {
     }
 
     /**
-     * @dev Returns the owner of the `tokenId`. Does NOT revert if token doesn't exist
+     * @dev Returns the owner of the `tokenId`. Does revert if token doesn't exist
      */
     function _ownerOf(uint256 tokenId) internal view virtual returns (address) {
         return _tokenOwners.get(tokenId, "ERC721: owner query for nonexistent token");
