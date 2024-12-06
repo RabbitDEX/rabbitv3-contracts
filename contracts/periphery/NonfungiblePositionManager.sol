@@ -379,10 +379,6 @@ contract NonfungiblePositionManager is
         _burn(tokenId);
     }
 
-    function _getAndIncrementNonce(uint256 tokenId) internal returns (uint256) {
-        return uint256(_positions[tokenId].nonce++);
-    }
-
     function _getNonce(uint256 tokenId) internal view override returns(uint256) {
         return uint256(_positions[tokenId].nonce);
     }
