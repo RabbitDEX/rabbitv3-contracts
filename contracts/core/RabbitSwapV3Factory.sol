@@ -60,7 +60,7 @@ contract RabbitSwapV3Factory is IRabbitSwapV3Factory, RabbitSwapV3PoolDeployer, 
     }
 
     /// @inheritdoc IRabbitSwapV3Factory
-    function enableFeeAmount(uint24 fee, int24 tickSpacing) public override {
+    function enableFeeAmount(uint24 fee, int24 tickSpacing) external override {
         require(msg.sender == owner);
         require(fee < 1000000);
         // tick spacing is capped at 16384 to prevent the situation where tickSpacing is so large that
