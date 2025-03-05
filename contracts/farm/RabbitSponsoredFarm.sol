@@ -1,0 +1,196 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+pragma solidity >=0.7.6;
+pragma abicoder v2;
+
+import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
+import '@openzeppelin/contracts/access/Ownable.sol';
+import '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
+import '@openzeppelin/contracts/cryptography/ECDSA.sol';
+import '@openzeppelin/contracts/drafts/EIP712.sol';
+import './interfaces/IRabbitSponsoredFarm.sol';
+import '../periphery/interfaces/INonfungiblePositionManager.sol';
+
+contract RabbitSponsoredFarm is
+    IRabbitSponsoredFarm,
+    Ownable,
+    ReentrancyGuard,
+    EIP712
+{
+    using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
+
+    bytes32 private constant HARVEST_TYPEHASH =
+        keccak256(
+            'Harvest(uint256 tokenId,uint256 farmId,uint256 totalClaimable,uint256 deadline)'
+        );
+
+    INonfungiblePositionManager
+        public immutable
+        override nonfungiblePositionManager;
+    mapping(uint256 => Farm) private _farms; // farmId => Farm
+    mapping(uint256 => address) public override positionOwner; // tokenId => owner
+    mapping(uint256 => uint256) public override positionLastHarvestTime; // tokenId => lastHarvestTime
+    mapping(uint256 => mapping(uint256 => uint256))
+        public
+        override positionTotalClaimed; // tokenId => farmId => amount
+    mapping(address => bool) private usedRewardTokens; // rewardToken => isUsed
+    uint256 public override totalStaked;
+    uint256 public nextFarmId;
+
+    function farms(
+        uint256 farmId
+    ) external view override returns (Farm memory) {
+        return _farms[farmId];
+    }
+
+    constructor(
+        address _nonfungiblePositionManager
+    ) EIP712('RabbitSponsoredFarm', '1') {
+        require(
+            _nonfungiblePositionManager != address(0),
+            'Invalid NFT manager'
+        );
+
+        nonfungiblePositionManager = INonfungiblePositionManager(
+            _nonfungiblePositionManager
+        );
+    }
+
+    function addFarm(
+        address rewardToken,
+        address signer
+    ) external override onlyOwner {
+        require(rewardToken != address(0), 'Invalid reward token');
+        require(signer != address(0), 'Invalid signer');
+        require(!usedRewardTokens[rewardToken], 'Reward token already in use');
+
+        uint256 farmId = nextFarmId++;
+        _farms[farmId] = Farm({
+            rewardToken: IERC20(rewardToken),
+            signer: signer,
+            active: true,
+            totalClaimable: 0,
+            totalClaimed: 0
+        });
+        usedRewardTokens[rewardToken] = true;
+
+        emit FarmAdded(farmId, rewardToken, signer);
+    }
+
+    function stake(uint256 tokenId) external override nonReentrant {
+        require(positionOwner[tokenId] == address(0), 'Already staked');
+        require(
+            nonfungiblePositionManager.ownerOf(tokenId) == msg.sender,
+            'Not owner'
+        );
+
+        nonfungiblePositionManager.transferFrom(
+            msg.sender,
+            address(this),
+            tokenId
+        );
+
+        positionOwner[tokenId] = msg.sender;
+        positionLastHarvestTime[tokenId] = block.timestamp;
+
+        totalStaked++;
+        emit PositionStaked(msg.sender, tokenId, block.number, block.timestamp);
+    }
+
+    function unstake(uint256 tokenId) external override nonReentrant {
+        require(positionOwner[tokenId] == msg.sender, 'Not owner');
+
+        delete positionOwner[tokenId];
+        delete positionLastHarvestTime[tokenId];
+        totalStaked--;
+
+        nonfungiblePositionManager.transferFrom(
+            address(this),
+            msg.sender,
+            tokenId
+        );
+        emit PositionUnstaked(
+            msg.sender,
+            tokenId,
+            block.number,
+            block.timestamp
+        );
+    }
+
+    function harvest(
+        HarvestParams calldata params
+    ) external override nonReentrant {
+        require(positionOwner[params.tokenId] == msg.sender, 'Not owner');
+        require(block.timestamp <= params.deadline, 'Signature expired');
+
+        Farm memory farm = _farms[params.farmId];
+        require(farm.active, 'Farm not active');
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                HARVEST_TYPEHASH,
+                params.tokenId,
+                params.farmId,
+                params.totalClaimable,
+                params.deadline
+            )
+        );
+
+        bytes32 digest = _hashTypedDataV4(structHash);
+
+        require(
+            digest.recover(params.signature) == farm.signer,
+            'Invalid signature'
+        );
+
+        uint256 harvestAmount = params.totalClaimable -
+            positionTotalClaimed[params.tokenId][params.farmId];
+        require(harvestAmount > 0, 'No rewards to harvest');
+        require(
+            harvestAmount <= farm.totalClaimable - farm.totalClaimed,
+            'Insufficient farm rewards'
+        );
+
+        positionLastHarvestTime[params.tokenId] = block.timestamp;
+        positionTotalClaimed[params.tokenId][params.farmId] = params
+            .totalClaimable;
+        _farms[params.farmId].totalClaimed += harvestAmount;
+
+        farm.rewardToken.safeTransfer(msg.sender, harvestAmount);
+        emit RewardHarvested(
+            msg.sender,
+            params.tokenId,
+            params.farmId,
+            harvestAmount,
+            block.number,
+            block.timestamp
+        );
+    }
+
+    function depositReward(
+        uint256 farmId,
+        uint256 amount
+    ) external override onlyOwner {
+        require(amount > 0, 'Amount must be greater than 0');
+        Farm memory farm = _farms[farmId];
+        require(farm.active, 'Farm not active');
+
+        farm.rewardToken.safeTransferFrom(msg.sender, address(this), amount);
+        _farms[farmId].totalClaimable += amount;
+        emit RewardDeposited(farmId, amount);
+    }
+
+    function setSigner(
+        uint256 farmId,
+        address _signer
+    ) external override onlyOwner {
+        require(_signer != address(0), 'Invalid signer');
+        Farm memory farm = _farms[farmId];
+        require(farm.active, 'Farm not active');
+
+        address oldSigner = farm.signer;
+        _farms[farmId].signer = _signer;
+        emit SignerUpdated(farmId, oldSigner, _signer);
+    }
+}
