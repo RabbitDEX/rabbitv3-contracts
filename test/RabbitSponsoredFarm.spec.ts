@@ -1,27 +1,38 @@
 import { expect } from 'chai';
-import { ethers } from 'hardhat';
+import { ethers, upgrades } from 'hardhat';
 import type { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
-import type { RabbitSponsoredFarm } from '../typechain-types';
-import type { BaseContract } from 'ethers';
+import type { RabbitSponsoredFarm, MockERC20, MockNFTManager } from '../typechain-types';
 
 describe('RabbitSponsoredFarm', () => {
     let farm: RabbitSponsoredFarm;
     let owner: SignerWithAddress;
-    let nftManager: SignerWithAddress;
-    let rewardToken: BaseContract;
+    let nftManager: MockNFTManager;
+    let rewardToken: MockERC20;
     let signer: SignerWithAddress;
+    let user: SignerWithAddress;
+    const tokenId = 1;
+    const farmId = 0;
 
     beforeEach(async () => {
-        [owner, nftManager, signer] = await ethers.getSigners();
+        [owner, signer, user] = await ethers.getSigners();
+        
+        // Deploy mock NFT manager
+        const MockNFTManager = await ethers.getContractFactory('MockNFTManager');
+        nftManager = await MockNFTManager.deploy() as MockNFTManager;
+        await nftManager.waitForDeployment();
         
         // Deploy mock reward token
         const MockERC20 = await ethers.getContractFactory('MockERC20');
-        rewardToken = await MockERC20.deploy('Reward Token', 'RWD');
+        rewardToken = await MockERC20.deploy('Reward Token', 'RWD') as MockERC20;
         await rewardToken.waitForDeployment();
 
-        // Deploy farm
+        // Deploy farm with proxy
         const RabbitSponsoredFarm = await ethers.getContractFactory('RabbitSponsoredFarm');
-        farm = await RabbitSponsoredFarm.deploy(nftManager.address);
+        farm = await upgrades.deployProxy(
+            RabbitSponsoredFarm,
+            [await nftManager.getAddress()],
+            { kind: 'transparent' }
+        ) as RabbitSponsoredFarm;
         await farm.waitForDeployment();
 
         // Add farm
@@ -34,7 +45,7 @@ describe('RabbitSponsoredFarm', () => {
         });
 
         it('should set correct NFT manager', async () => {
-            expect(await farm.nonfungiblePositionManager()).to.equal(nftManager.address);
+            expect(await farm.nonfungiblePositionManager()).to.equal(await nftManager.getAddress());
         });
 
         it('should initialize with zero total staked', async () => {
@@ -74,6 +85,256 @@ describe('RabbitSponsoredFarm', () => {
 
             await expect(farm.addFarm(await newToken.getAddress(), ethers.ZeroAddress))
                 .to.be.revertedWith('Invalid signer');
+        });
+    });
+
+    describe('stake', () => {
+        beforeEach(async () => {
+            await nftManager.setOwner(tokenId, user.address);
+        });
+
+        it('should stake NFT successfully', async () => {
+            await farm.connect(user).stake(tokenId);
+            expect(await farm.positionOwner(tokenId)).to.equal(user.address);
+            expect(await farm.totalStaked()).to.equal(1);
+        });
+
+        it('should not allow staking already staked NFT', async () => {
+            await farm.connect(user).stake(tokenId);
+            await expect(farm.connect(user).stake(tokenId))
+                .to.be.revertedWith('Already staked');
+        });
+
+        it('should not allow staking NFT not owned', async () => {
+            await nftManager.setOwner(tokenId, owner.address);
+            await expect(farm.connect(user).stake(tokenId))
+                .to.be.revertedWith('Not owner');
+        });
+    });
+
+    describe('unstake', () => {
+        beforeEach(async () => {
+            await nftManager.setOwner(tokenId, user.address);
+            await farm.connect(user).stake(tokenId);
+        });
+
+        it('should unstake NFT successfully', async () => {
+            await farm.connect(user).unstake(tokenId);
+            expect(await farm.positionOwner(tokenId)).to.equal(ethers.ZeroAddress);
+            expect(await farm.totalStaked()).to.equal(0);
+        });
+
+        it('should not allow unstaking by non-owner', async () => {
+            await expect(farm.connect(owner).unstake(tokenId))
+                .to.be.revertedWith('Not owner');
+        });
+    });
+
+    describe('harvest', () => {
+        const amount = ethers.parseEther('100');
+        let deadline: number;
+
+        beforeEach(async () => {
+            deadline = Math.floor(Date.now() / 1000) + 3600;
+            await nftManager.setOwner(tokenId, user.address);
+            await farm.connect(user).stake(tokenId);
+            await rewardToken.mint(owner.address, amount);
+            await rewardToken.connect(owner).approve(await farm.getAddress(), amount);
+            await farm.connect(owner).depositReward(farmId, amount);
+        });
+
+        it('should harvest rewards successfully', async () => {
+            const domain = {
+                name: 'RabbitSponsoredFarm',
+                version: '1',
+                chainId: (await ethers.provider.getNetwork()).chainId,
+                verifyingContract: await farm.getAddress()
+            };
+
+            const types = {
+                Harvest: [
+                    { name: 'tokenId', type: 'uint256' },
+                    { name: 'farmId', type: 'uint256' },
+                    { name: 'totalClaimable', type: 'uint256' },
+                    { name: 'deadline', type: 'uint256' }
+                ]
+            };
+
+            const value = {
+                tokenId,
+                farmId,
+                totalClaimable: amount,
+                deadline
+            };
+
+            const signature = await signer.signTypedData(domain, types, value);
+
+            const balanceBefore = await rewardToken.balanceOf(user.address);
+            await farm.connect(user).harvest({
+                tokenId,
+                farmId,
+                totalClaimable: amount,
+                deadline,
+                signature
+            });
+
+            expect(await rewardToken.balanceOf(user.address)).to.equal(balanceBefore + amount);
+            expect(await farm.positionTotalClaimed(tokenId, farmId)).to.equal(amount);
+        });
+
+        it('should not allow harvest with expired signature', async () => {
+            const expiredDeadline = Math.floor(Date.now() / 1000) - 3600;
+            const domain = {
+                name: 'RabbitSponsoredFarm',
+                version: '1',
+                chainId: (await ethers.provider.getNetwork()).chainId,
+                verifyingContract: await farm.getAddress()
+            };
+
+            const types = {
+                Harvest: [
+                    { name: 'tokenId', type: 'uint256' },
+                    { name: 'farmId', type: 'uint256' },
+                    { name: 'totalClaimable', type: 'uint256' },
+                    { name: 'deadline', type: 'uint256' }
+                ]
+            };
+
+            const value = {
+                tokenId,
+                farmId,
+                totalClaimable: amount,
+                deadline: expiredDeadline
+            };
+
+            const signature = await signer.signTypedData(domain, types, value);
+
+            await expect(farm.connect(user).harvest({
+                tokenId,
+                farmId,
+                totalClaimable: amount,
+                deadline: expiredDeadline,
+                signature
+            })).to.be.revertedWith('Signature expired');
+        });
+
+        it('should not allow harvest with invalid signature', async () => {
+            const domain = {
+                name: 'RabbitSponsoredFarm',
+                version: '1',
+                chainId: (await ethers.provider.getNetwork()).chainId,
+                verifyingContract: await farm.getAddress()
+            };
+
+            const types = {
+                Harvest: [
+                    { name: 'tokenId', type: 'uint256' },
+                    { name: 'farmId', type: 'uint256' },
+                    { name: 'totalClaimable', type: 'uint256' },
+                    { name: 'deadline', type: 'uint256' }
+                ]
+            };
+
+            const value = {
+                tokenId,
+                farmId,
+                totalClaimable: amount,
+                deadline
+            };
+
+            const signature = await owner.signTypedData(domain, types, value);
+
+            await expect(farm.connect(user).harvest({
+                tokenId,
+                farmId,
+                totalClaimable: amount,
+                deadline,
+                signature
+            })).to.be.revertedWith('Invalid signature');
+        });
+    });
+
+    describe('depositReward', () => {
+        const amount = ethers.parseEther('100');
+
+        beforeEach(async () => {
+            await rewardToken.mint(owner.address, amount);
+            await rewardToken.approve(await farm.getAddress(), amount);
+        });
+
+        it('should deposit rewards successfully', async () => {
+            await farm.depositReward(farmId, amount);
+            const farmData = await farm.farms(farmId);
+            expect(farmData.totalClaimable).to.equal(amount);
+        });
+
+        it('should not allow deposit of zero amount', async () => {
+            await expect(farm.depositReward(farmId, 0))
+                .to.be.revertedWith('Amount must be greater than 0');
+        });
+
+        it('should not allow deposit to inactive farm', async () => {
+            const MockERC20 = await ethers.getContractFactory('MockERC20');
+            const newToken = await MockERC20.deploy('New Token', 'NEW');
+            await newToken.waitForDeployment();
+            await farm.addFarm(await newToken.getAddress(), signer.address);
+
+            await expect(farm.depositReward(99, amount))
+                .to.be.revertedWith('Farm not active');
+        });
+    });
+
+    describe('setSigner', () => {
+        const newSigner = ethers.Wallet.createRandom();
+
+        it('should update signer successfully', async () => {
+            await farm.setSigner(farmId, newSigner.address);
+            const farmData = await farm.farms(farmId);
+            expect(farmData.signer).to.equal(newSigner.address);
+        });
+
+        it('should not allow setting zero address signer', async () => {
+            await expect(farm.setSigner(farmId, ethers.ZeroAddress))
+                .to.be.revertedWith('Invalid signer');
+        });
+
+        it('should not allow setting signer for inactive farm', async () => {
+            await expect(farm.setSigner(99, newSigner.address))
+                .to.be.revertedWith('Farm not active');
+        });
+
+        it('should emit SignerUpdated event', async () => {
+            await expect(farm.setSigner(farmId, newSigner.address))
+                .to.emit(farm, 'SignerUpdated')
+                .withArgs(farmId, signer.address, newSigner.address);
+        });
+    });
+
+    describe('upgrades', () => {
+        it('should be upgradeable', async () => {
+            // Deploy V2 implementation
+            const RabbitSponsoredFarmV2 = await ethers.getContractFactory('RabbitSponsoredFarm');
+            const farmV2 = await upgrades.upgradeProxy(
+                await farm.getAddress(),
+                RabbitSponsoredFarmV2
+            ) as RabbitSponsoredFarm;
+
+            // Check that storage values are preserved
+            expect(await farmV2.owner()).to.equal(owner.address);
+            expect(await farmV2.nonfungiblePositionManager()).to.equal(await nftManager.getAddress());
+            expect(await farmV2.totalStaked()).to.equal(0);
+
+            const farmData = await farmV2.farms(0);
+            expect(farmData.rewardToken).to.equal(await rewardToken.getAddress());
+            expect(farmData.signer).to.equal(signer.address);
+            expect(farmData.active).to.equal(true);
+        });
+
+        it('should not allow non-owner to upgrade', async () => {
+            const RabbitSponsoredFarmV2 = await ethers.getContractFactory('RabbitSponsoredFarm', user);
+            await expect(
+                upgrades.upgradeProxy(await farm.getAddress(), RabbitSponsoredFarmV2)
+            ).to.be.revertedWithCustomError;
         });
     });
 });
