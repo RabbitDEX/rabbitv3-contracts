@@ -2,32 +2,33 @@
 pragma solidity >=0.7.6;
 pragma abicoder v2;
 
-import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
-import '@openzeppelin/contracts/access/Ownable.sol';
-import '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
-import '@openzeppelin/contracts/cryptography/ECDSA.sol';
-import '@openzeppelin/contracts/drafts/EIP712.sol';
+import '@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol';
+import '@openzeppelin/contracts-upgradeable/token/ERC20/SafeERC20Upgradeable.sol';
+import '@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol';
+import '@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol';
+import '@openzeppelin/contracts-upgradeable/cryptography/ECDSAUpgradeable.sol';
+import '@openzeppelin/contracts-upgradeable/drafts/EIP712Upgradeable.sol';
+import '@openzeppelin/contracts-upgradeable/proxy/Initializable.sol';
+import '@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol';
 import './interfaces/IRabbitSponsoredFarm.sol';
 import '../periphery/interfaces/INonfungiblePositionManager.sol';
 
 contract RabbitSponsoredFarm is
     IRabbitSponsoredFarm,
-    Ownable,
-    ReentrancyGuard,
-    EIP712
+    Initializable,
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable,
+    EIP712Upgradeable
 {
-    using SafeERC20 for IERC20;
-    using ECDSA for bytes32;
+    using SafeERC20Upgradeable for IERC20Upgradeable;
+    using ECDSAUpgradeable for bytes32;
 
     bytes32 private constant HARVEST_TYPEHASH =
         keccak256(
             'Harvest(uint256 tokenId,uint256 farmId,uint256 totalClaimable,uint256 deadline)'
         );
 
-    INonfungiblePositionManager
-        public immutable
-        override nonfungiblePositionManager;
+    INonfungiblePositionManager public override nonfungiblePositionManager;
     mapping(uint256 => Farm) private _farms; // farmId => Farm
     mapping(uint256 => address) public override positionOwner; // tokenId => owner
     mapping(uint256 => uint256) public override positionLastHarvestTime; // tokenId => lastHarvestTime
@@ -38,23 +39,30 @@ contract RabbitSponsoredFarm is
     uint256 public override totalStaked;
     uint256 public nextFarmId;
 
-    function farms(
-        uint256 farmId
-    ) external view override returns (Farm memory) {
-        return _farms[farmId];
-    }
-
-    constructor(
+    function initialize(
         address _nonfungiblePositionManager
-    ) EIP712('RabbitSponsoredFarm', '1') {
+    ) public initializer {
         require(
             _nonfungiblePositionManager != address(0),
             'Invalid NFT manager'
         );
-
         nonfungiblePositionManager = INonfungiblePositionManager(
             _nonfungiblePositionManager
         );
+        __Context_init();
+        __Ownable_init();
+        __ReentrancyGuard_init();
+        __EIP712_init('RabbitSponsoredFarm', '1');
+    }
+
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal virtual onlyOwner {}
+
+    function farms(
+        uint256 farmId
+    ) external view override returns (Farm memory) {
+        return _farms[farmId];
     }
 
     function addFarm(
@@ -67,7 +75,7 @@ contract RabbitSponsoredFarm is
 
         uint256 farmId = nextFarmId++;
         _farms[farmId] = Farm({
-            rewardToken: IERC20(rewardToken),
+            rewardToken: IERC20Upgradeable(rewardToken),
             signer: signer,
             active: true,
             totalClaimable: 0,

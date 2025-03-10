@@ -2,12 +2,12 @@
 pragma solidity >=0.7.6;
 pragma abicoder v2;
 
-import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import '@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol';
 import '../../periphery/interfaces/INonfungiblePositionManager.sol';
 
 interface IRabbitSponsoredFarm {
     struct Farm {
-        IERC20 rewardToken;
+        IERC20Upgradeable rewardToken;
         address signer;
         bool active;
         uint256 totalClaimable;
@@ -23,19 +23,19 @@ interface IRabbitSponsoredFarm {
     }
 
     event PositionStaked(
-        address indexed owner,
+        address indexed user,
         uint256 indexed tokenId,
         uint256 blockNumber,
         uint256 timestamp
     );
     event PositionUnstaked(
-        address indexed owner,
+        address indexed user,
         uint256 indexed tokenId,
         uint256 blockNumber,
         uint256 timestamp
     );
     event RewardHarvested(
-        address indexed owner,
+        address indexed user,
         uint256 indexed tokenId,
         uint256 indexed farmId,
         uint256 amount,
