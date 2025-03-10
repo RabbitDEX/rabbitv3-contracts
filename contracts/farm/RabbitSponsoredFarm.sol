@@ -68,7 +68,8 @@ contract RabbitSponsoredFarm is
     function addFarm(
         address rewardToken,
         address signer,
-        address pool
+        address pool,
+        uint256 rewardPerBlock
     ) external override onlyOwner {
         require(rewardToken != address(0), 'Invalid reward token');
         require(signer != address(0), 'Invalid signer');
@@ -82,11 +83,12 @@ contract RabbitSponsoredFarm is
             active: true,
             totalClaimable: 0,
             totalClaimed: 0,
-            pool: pool
+            pool: pool,
+            rewardPerBlock: rewardPerBlock
         });
         usedRewardTokens[rewardToken] = true;
 
-        emit FarmAdded(farmId, rewardToken, signer, pool);
+        emit FarmAdded(farmId, rewardToken, signer, pool, rewardPerBlock);
     }
 
     function stake(uint256 tokenId) external override nonReentrant {
@@ -203,5 +205,17 @@ contract RabbitSponsoredFarm is
         address oldSigner = farm.signer;
         _farms[farmId].signer = _signer;
         emit SignerUpdated(farmId, oldSigner, _signer);
+    }
+
+    function setRewardPerBlock(
+        uint256 farmId,
+        uint256 rewardPerBlock
+    ) external override onlyOwner {
+        Farm memory farm = _farms[farmId];
+        require(farm.active, 'Farm not active');
+
+        uint256 oldRewardPerBlock = farm.rewardPerBlock;
+        _farms[farmId].rewardPerBlock = rewardPerBlock;
+        emit RewardPerBlockUpdated(farmId, oldRewardPerBlock, rewardPerBlock);
     }
 }

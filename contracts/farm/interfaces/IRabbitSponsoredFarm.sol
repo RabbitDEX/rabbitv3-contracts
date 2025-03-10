@@ -13,6 +13,7 @@ interface IRabbitSponsoredFarm {
         uint256 totalClaimable;
         uint256 totalClaimed;
         address pool;
+        uint256 rewardPerBlock;
     }
 
     struct HarvestParams {
@@ -53,7 +54,13 @@ interface IRabbitSponsoredFarm {
         uint256 indexed farmId,
         address indexed rewardToken,
         address indexed signer,
-        address pool
+        address pool,
+        uint256 rewardPerBlock
+    );
+    event RewardPerBlockUpdated(
+        uint256 indexed farmId,
+        uint256 oldRewardPerBlock,
+        uint256 newRewardPerBlock
     );
 
     function nonfungiblePositionManager()
@@ -74,11 +81,13 @@ interface IRabbitSponsoredFarm {
     function addFarm(
         address rewardToken,
         address signer,
-        address pool
+        address pool,
+        uint256 rewardPerBlock
     ) external;
     function stake(uint256 tokenId) external;
     function unstake(uint256 tokenId) external;
     function harvest(HarvestParams calldata params) external;
     function depositReward(uint256 farmId, uint256 amount) external;
     function setSigner(uint256 farmId, address _signer) external;
+    function setRewardPerBlock(uint256 farmId, uint256 rewardPerBlock) external;
 }

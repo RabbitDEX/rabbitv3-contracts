@@ -36,7 +36,7 @@ describe('RabbitSponsoredFarm', () => {
         await farm.waitForDeployment();
 
         // Add farm
-        await farm.addFarm(await rewardToken.getAddress(), signer.address, ethers.Wallet.createRandom().address);
+        await farm.addFarm(await rewardToken.getAddress(), signer.address, ethers.Wallet.createRandom().address, 0);
     });
 
     describe('deployment', () => {
@@ -60,7 +60,8 @@ describe('RabbitSponsoredFarm', () => {
             await newToken.waitForDeployment();
 
             const poolAddress = ethers.Wallet.createRandom().address;
-            await farm.addFarm(await newToken.getAddress(), signer.address, poolAddress);
+            const initialRewardPerBlock = ethers.parseEther('5');
+            await farm.addFarm(await newToken.getAddress(), signer.address, poolAddress, initialRewardPerBlock);
             const farmData = await farm.farms(1);
             expect(farmData.rewardToken).to.equal(await newToken.getAddress());
             expect(farmData.signer).to.equal(signer.address);
@@ -68,6 +69,7 @@ describe('RabbitSponsoredFarm', () => {
             expect(farmData.totalClaimable).to.equal(0);
             expect(farmData.totalClaimed).to.equal(0);
             expect(farmData.pool).to.equal(poolAddress);
+            expect(farmData.rewardPerBlock).to.equal(initialRewardPerBlock);
         });
 
         it('should not allow duplicate reward tokens', async () => {
@@ -75,13 +77,13 @@ describe('RabbitSponsoredFarm', () => {
             const newToken = await MockERC20.deploy('New Token', 'NEW');
             await newToken.waitForDeployment();
 
-            await farm.addFarm(await newToken.getAddress(), signer.address, ethers.Wallet.createRandom().address);
-            await expect(farm.addFarm(await newToken.getAddress(), signer.address, ethers.Wallet.createRandom().address))
+            await farm.addFarm(await newToken.getAddress(), signer.address, ethers.Wallet.createRandom().address, 0);
+            await expect(farm.addFarm(await newToken.getAddress(), signer.address, ethers.Wallet.createRandom().address, 0))
                 .to.be.revertedWith('Reward token already in use');
         });
 
         it('should not allow zero address reward token', async () => {
-            await expect(farm.addFarm(ethers.ZeroAddress, signer.address, ethers.Wallet.createRandom().address))
+            await expect(farm.addFarm(ethers.ZeroAddress, signer.address, ethers.Wallet.createRandom().address, 0))
                 .to.be.revertedWith('Invalid reward token');
         });
 
@@ -90,7 +92,7 @@ describe('RabbitSponsoredFarm', () => {
             const newToken = await MockERC20.deploy('New Token', 'NEW');
             await newToken.waitForDeployment();
 
-            await expect(farm.addFarm(await newToken.getAddress(), ethers.ZeroAddress, ethers.Wallet.createRandom().address))
+            await expect(farm.addFarm(await newToken.getAddress(), ethers.ZeroAddress, ethers.Wallet.createRandom().address, 0))
                 .to.be.revertedWith('Invalid signer');
         });
 
@@ -99,7 +101,7 @@ describe('RabbitSponsoredFarm', () => {
             const newToken = await MockERC20.deploy('New Token', 'NEW');
             await newToken.waitForDeployment();
 
-            await expect(farm.addFarm(await newToken.getAddress(), signer.address, ethers.ZeroAddress))
+            await expect(farm.addFarm(await newToken.getAddress(), signer.address, ethers.ZeroAddress, 0))
                 .to.be.revertedWith('Invalid pool');
         });
 
@@ -109,9 +111,10 @@ describe('RabbitSponsoredFarm', () => {
             await newToken.waitForDeployment();
 
             const poolAddress = ethers.Wallet.createRandom().address;
-            await expect(farm.addFarm(await newToken.getAddress(), signer.address, poolAddress))
+            const initialRewardPerBlock = ethers.parseEther('5');
+            await expect(farm.addFarm(await newToken.getAddress(), signer.address, poolAddress, initialRewardPerBlock))
                 .to.emit(farm, 'FarmAdded')
-                .withArgs(1, await newToken.getAddress(), signer.address, poolAddress);
+                .withArgs(1, await newToken.getAddress(), signer.address, poolAddress, initialRewardPerBlock);
         });
     });
 
@@ -361,7 +364,7 @@ describe('RabbitSponsoredFarm', () => {
             const MockERC20 = await ethers.getContractFactory('MockERC20');
             const newToken = await MockERC20.deploy('New Token', 'NEW');
             await newToken.waitForDeployment();
-            await farm.addFarm(await newToken.getAddress(), signer.address, ethers.Wallet.createRandom().address);
+            await farm.addFarm(await newToken.getAddress(), signer.address, ethers.Wallet.createRandom().address, 0);
 
             await expect(farm.depositReward(99, amount))
                 .to.be.revertedWith('Farm not active');
@@ -397,6 +400,27 @@ describe('RabbitSponsoredFarm', () => {
             await expect(farm.setSigner(farmId, newSigner.address))
                 .to.emit(farm, 'SignerUpdated')
                 .withArgs(farmId, signer.address, newSigner.address);
+        });
+    });
+
+    describe('setRewardPerBlock', () => {
+        const newRewardPerBlock = ethers.parseEther('10');
+
+        it('should update reward per block successfully', async () => {
+            await farm.setRewardPerBlock(farmId, newRewardPerBlock);
+            const farmData = await farm.farms(farmId);
+            expect(farmData.rewardPerBlock).to.equal(newRewardPerBlock);
+        });
+
+        it('should not allow setting reward per block for inactive farm', async () => {
+            await expect(farm.setRewardPerBlock(99, newRewardPerBlock))
+                .to.be.revertedWith('Farm not active');
+        });
+
+        it('should emit RewardPerBlockUpdated event', async () => {
+            await expect(farm.setRewardPerBlock(farmId, newRewardPerBlock))
+                .to.emit(farm, 'RewardPerBlockUpdated')
+                .withArgs(farmId, 0, newRewardPerBlock);
         });
     });
 
