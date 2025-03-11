@@ -20,7 +20,7 @@ interface IRabbitSponsoredFarm {
         uint256 tokenId;
         uint256 farmId;
         uint256 totalClaimable;
-        uint256 deadline;
+        uint256 blockNumber;
         bytes signature;
     }
 
@@ -69,7 +69,7 @@ interface IRabbitSponsoredFarm {
         returns (INonfungiblePositionManager);
     function farms(uint256 farmId) external view returns (Farm memory);
     function positionOwner(uint256 tokenId) external view returns (address);
-    function positionLastHarvestTime(
+    function positionLastHarvestBlock(
         uint256 tokenId
     ) external view returns (uint256);
     function positionTotalClaimed(

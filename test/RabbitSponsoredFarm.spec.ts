@@ -169,10 +169,8 @@ describe('RabbitSponsoredFarm', () => {
 
     describe('harvest', () => {
         const amount = ethers.parseEther('100');
-        let deadline: number;
 
         beforeEach(async () => {
-            deadline = Math.floor(Date.now() / 1000) + 3600;
             await nftManager.setOwner(tokenId, user.address);
             await farm.connect(user).stake(tokenId);
             await rewardToken.mint(owner.address, amount);
@@ -193,15 +191,16 @@ describe('RabbitSponsoredFarm', () => {
                     { name: 'tokenId', type: 'uint256' },
                     { name: 'farmId', type: 'uint256' },
                     { name: 'totalClaimable', type: 'uint256' },
-                    { name: 'deadline', type: 'uint256' }
+                    { name: 'blockNumber', type: 'uint256' }
                 ]
             };
 
+            const blockNumber = await ethers.provider.getBlockNumber();
             const value = {
                 tokenId,
                 farmId,
                 totalClaimable: amount,
-                deadline
+                blockNumber
             };
 
             const signature = await signer.signTypedData(domain, types, value);
@@ -211,7 +210,7 @@ describe('RabbitSponsoredFarm', () => {
                 tokenId,
                 farmId,
                 totalClaimable: amount,
-                deadline,
+                blockNumber,
                 signature
             });
 
@@ -219,8 +218,7 @@ describe('RabbitSponsoredFarm', () => {
             expect(await farm.positionTotalClaimed(tokenId, farmId)).to.equal(amount);
         });
 
-        it('should not allow harvest with expired signature', async () => {
-            const expiredDeadline = Math.floor(Date.now() / 1000) - 3600;
+        it('should not allow harvest with future block number', async () => {
             const domain = {
                 name: 'RabbitSponsoredFarm',
                 version: '1',
@@ -233,15 +231,16 @@ describe('RabbitSponsoredFarm', () => {
                     { name: 'tokenId', type: 'uint256' },
                     { name: 'farmId', type: 'uint256' },
                     { name: 'totalClaimable', type: 'uint256' },
-                    { name: 'deadline', type: 'uint256' }
+                    { name: 'blockNumber', type: 'uint256' }
                 ]
             };
 
+            const blockNumber = (await ethers.provider.getBlockNumber()) + 100;
             const value = {
                 tokenId,
                 farmId,
                 totalClaimable: amount,
-                deadline: expiredDeadline
+                blockNumber
             };
 
             const signature = await signer.signTypedData(domain, types, value);
@@ -250,9 +249,9 @@ describe('RabbitSponsoredFarm', () => {
                 tokenId,
                 farmId,
                 totalClaimable: amount,
-                deadline: expiredDeadline,
+                blockNumber,
                 signature
-            })).to.be.revertedWith('Signature expired');
+            })).to.be.revertedWith('Block not reached');
         });
 
         it('should not allow harvest with invalid signature', async () => {
@@ -268,15 +267,16 @@ describe('RabbitSponsoredFarm', () => {
                     { name: 'tokenId', type: 'uint256' },
                     { name: 'farmId', type: 'uint256' },
                     { name: 'totalClaimable', type: 'uint256' },
-                    { name: 'deadline', type: 'uint256' }
+                    { name: 'blockNumber', type: 'uint256' }
                 ]
             };
 
+            const blockNumber = await ethers.provider.getBlockNumber();
             const value = {
                 tokenId,
                 farmId,
                 totalClaimable: amount,
-                deadline
+                blockNumber
             };
 
             const signature = await owner.signTypedData(domain, types, value);
@@ -285,7 +285,7 @@ describe('RabbitSponsoredFarm', () => {
                 tokenId,
                 farmId,
                 totalClaimable: amount,
-                deadline,
+                blockNumber,
                 signature
             })).to.be.revertedWith('Invalid signature');
         });
@@ -303,15 +303,16 @@ describe('RabbitSponsoredFarm', () => {
                     { name: 'tokenId', type: 'uint256' },
                     { name: 'farmId', type: 'uint256' },
                     { name: 'totalClaimable', type: 'uint256' },
-                    { name: 'deadline', type: 'uint256' }
+                    { name: 'blockNumber', type: 'uint256' }
                 ]
             };
 
+            const blockNumber = await ethers.provider.getBlockNumber();
             const value = {
                 tokenId,
                 farmId,
                 totalClaimable: amount,
-                deadline
+                blockNumber
             };
 
             const signature = await signer.signTypedData(domain, types, value);
@@ -319,7 +320,7 @@ describe('RabbitSponsoredFarm', () => {
                 tokenId,
                 farmId,
                 totalClaimable: amount,
-                deadline,
+                blockNumber,
                 signature
             });
             const receipt = await tx.wait();

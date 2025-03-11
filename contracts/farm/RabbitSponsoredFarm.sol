@@ -25,13 +25,13 @@ contract RabbitSponsoredFarm is
 
     bytes32 private constant HARVEST_TYPEHASH =
         keccak256(
-            'Harvest(uint256 tokenId,uint256 farmId,uint256 totalClaimable,uint256 deadline)'
+            'Harvest(uint256 tokenId,uint256 farmId,uint256 totalClaimable,uint256 blockNumber)'
         );
 
     INonfungiblePositionManager public override nonfungiblePositionManager;
     mapping(uint256 => Farm) private _farms; // farmId => Farm
     mapping(uint256 => address) public override positionOwner; // tokenId => owner
-    mapping(uint256 => uint256) public override positionLastHarvestTime; // tokenId => lastHarvestTime
+    mapping(uint256 => uint256) public override positionLastHarvestBlock; // tokenId => lastHarvestBlock
     mapping(uint256 => mapping(uint256 => uint256))
         public
         override positionTotalClaimed; // tokenId => farmId => amount
@@ -102,7 +102,7 @@ contract RabbitSponsoredFarm is
         );
 
         positionOwner[tokenId] = msg.sender;
-        positionLastHarvestTime[tokenId] = block.timestamp;
+        positionLastHarvestBlock[tokenId] = block.number;
 
         totalStaked++;
         emit PositionStaked(msg.sender, tokenId, block.number, block.timestamp);
@@ -112,7 +112,7 @@ contract RabbitSponsoredFarm is
         require(positionOwner[tokenId] == msg.sender, 'Not owner');
 
         delete positionOwner[tokenId];
-        delete positionLastHarvestTime[tokenId];
+        delete positionLastHarvestBlock[tokenId];
         totalStaked--;
 
         nonfungiblePositionManager.transferFrom(
@@ -132,7 +132,11 @@ contract RabbitSponsoredFarm is
         HarvestParams calldata params
     ) external override nonReentrant {
         require(positionOwner[params.tokenId] == msg.sender, 'Not owner');
-        require(block.timestamp <= params.deadline, 'Signature expired');
+        require(block.number >= params.blockNumber, 'Block not reached');
+        require(
+            positionLastHarvestBlock[params.tokenId] <= params.blockNumber,
+            'Invalid block number'
+        );
 
         Farm memory farm = _farms[params.farmId];
         require(farm.active, 'Farm not active');
@@ -143,7 +147,7 @@ contract RabbitSponsoredFarm is
                 params.tokenId,
                 params.farmId,
                 params.totalClaimable,
-                params.deadline
+                params.blockNumber
             )
         );
 
@@ -162,7 +166,7 @@ contract RabbitSponsoredFarm is
             'Insufficient farm rewards'
         );
 
-        positionLastHarvestTime[params.tokenId] = block.timestamp;
+        positionLastHarvestBlock[params.tokenId] = block.number;
         positionTotalClaimed[params.tokenId][params.farmId] = params
             .totalClaimable;
         _farms[params.farmId].totalClaimed += harvestAmount;
