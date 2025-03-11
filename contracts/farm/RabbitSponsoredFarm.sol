@@ -35,7 +35,6 @@ contract RabbitSponsoredFarm is
     mapping(uint256 => mapping(uint256 => uint256))
         public
         override positionTotalClaimed; // tokenId => farmId => amount
-    mapping(address => bool) private usedRewardTokens; // rewardToken => isUsed
     uint256 public override totalStaked;
     uint256 public nextFarmId;
 
@@ -74,7 +73,6 @@ contract RabbitSponsoredFarm is
         require(rewardToken != address(0), 'Invalid reward token');
         require(signer != address(0), 'Invalid signer');
         require(pool != address(0), 'Invalid pool');
-        require(!usedRewardTokens[rewardToken], 'Reward token already in use');
 
         uint256 farmId = nextFarmId++;
         _farms[farmId] = Farm({
@@ -86,7 +84,6 @@ contract RabbitSponsoredFarm is
             pool: pool,
             rewardPerBlock: rewardPerBlock
         });
-        usedRewardTokens[rewardToken] = true;
 
         emit FarmAdded(farmId, rewardToken, signer, pool, rewardPerBlock);
     }

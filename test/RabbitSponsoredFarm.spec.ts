@@ -72,16 +72,6 @@ describe('RabbitSponsoredFarm', () => {
             expect(farmData.rewardPerBlock).to.equal(initialRewardPerBlock);
         });
 
-        it('should not allow duplicate reward tokens', async () => {
-            const MockERC20 = await ethers.getContractFactory('MockERC20');
-            const newToken = await MockERC20.deploy('New Token', 'NEW');
-            await newToken.waitForDeployment();
-
-            await farm.addFarm(await newToken.getAddress(), signer.address, ethers.Wallet.createRandom().address, 0);
-            await expect(farm.addFarm(await newToken.getAddress(), signer.address, ethers.Wallet.createRandom().address, 0))
-                .to.be.revertedWith('Reward token already in use');
-        });
-
         it('should not allow zero address reward token', async () => {
             await expect(farm.addFarm(ethers.ZeroAddress, signer.address, ethers.Wallet.createRandom().address, 0))
                 .to.be.revertedWith('Invalid reward token');
