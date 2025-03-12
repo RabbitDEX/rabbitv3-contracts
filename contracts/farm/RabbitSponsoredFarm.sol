@@ -54,10 +54,6 @@ contract RabbitSponsoredFarm is
         __EIP712_init('RabbitSponsoredFarm', '1');
     }
 
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal virtual onlyOwner {}
-
     function farms(
         uint256 farmId
     ) external view override returns (Farm memory) {

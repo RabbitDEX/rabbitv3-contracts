@@ -1,10 +1,19 @@
 import { expect } from 'chai';
-import { ethers, upgrades } from 'hardhat';
+import { ethers } from 'hardhat';
 import type { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
-import type { RabbitSponsoredFarm, MockERC20, MockNFTManager } from '../typechain-types';
+import type { 
+  RabbitSponsoredFarm, 
+  MockERC20, 
+  MockNFTManager,
+  ProxyAdmin,
+  TransparentUpgradeableProxy 
+} from '../typechain-types';
 
 describe('RabbitSponsoredFarm', () => {
     let farm: RabbitSponsoredFarm;
+    let implementation: RabbitSponsoredFarm;
+    let proxyAdmin: ProxyAdmin;
+    let proxy: TransparentUpgradeableProxy;
     let owner: SignerWithAddress;
     let nftManager: MockNFTManager;
     let rewardToken: MockERC20;
@@ -18,22 +27,41 @@ describe('RabbitSponsoredFarm', () => {
         
         // Deploy mock NFT manager
         const MockNFTManager = await ethers.getContractFactory('MockNFTManager');
-        nftManager = await MockNFTManager.deploy() as MockNFTManager;
+        nftManager = await MockNFTManager.deploy();
         await nftManager.waitForDeployment();
         
         // Deploy mock reward token
         const MockERC20 = await ethers.getContractFactory('MockERC20');
-        rewardToken = await MockERC20.deploy('Reward Token', 'RWD') as MockERC20;
+        rewardToken = await MockERC20.deploy('Reward Token', 'RWD');
         await rewardToken.waitForDeployment();
 
-        // Deploy farm with proxy
+        // Deploy implementation
         const RabbitSponsoredFarm = await ethers.getContractFactory('RabbitSponsoredFarm');
-        farm = await upgrades.deployProxy(
-            RabbitSponsoredFarm,
-            [await nftManager.getAddress()],
-            { kind: 'transparent' }
-        ) as RabbitSponsoredFarm;
-        await farm.waitForDeployment();
+        implementation = await RabbitSponsoredFarm.deploy();
+        await implementation.waitForDeployment();
+
+        // Deploy ProxyAdmin
+        const ProxyAdmin = await ethers.getContractFactory('ProxyAdmin');
+        proxyAdmin = await ProxyAdmin.deploy();
+        await proxyAdmin.waitForDeployment();
+
+        // Transfer ProxyAdmin ownership
+        await proxyAdmin.transferOwnership(owner.address);
+
+        // Prepare initialization data
+        const initData = RabbitSponsoredFarm.interface.encodeFunctionData('initialize', [await nftManager.getAddress()]);
+
+        // Deploy TransparentUpgradeableProxy
+        const TransparentUpgradeableProxy = await ethers.getContractFactory('TransparentUpgradeableProxy');
+        proxy = await TransparentUpgradeableProxy.deploy(
+            await implementation.getAddress(),
+            await proxyAdmin.getAddress(),
+            initData
+        ) as TransparentUpgradeableProxy;
+        await proxy.waitForDeployment();
+
+        // Get farm instance
+        farm = RabbitSponsoredFarm.attach(await proxy.getAddress()) as RabbitSponsoredFarm;
 
         // Add farm
         await farm.addFarm(await rewardToken.getAddress(), signer.address, ethers.Wallet.createRandom().address, 0);
@@ -419,10 +447,14 @@ describe('RabbitSponsoredFarm', () => {
         it('should be upgradeable', async () => {
             // Deploy V2 implementation
             const RabbitSponsoredFarmV2 = await ethers.getContractFactory('RabbitSponsoredFarm');
-            const farmV2 = await upgrades.upgradeProxy(
-                await farm.getAddress(),
-                RabbitSponsoredFarmV2
-            ) as RabbitSponsoredFarm;
+            const implementationV2 = await RabbitSponsoredFarmV2.deploy();
+            await implementationV2.waitForDeployment();
+
+            // Upgrade using ProxyAdmin
+            await proxyAdmin.upgrade(await proxy.getAddress(), await implementationV2.getAddress());
+
+            // Get V2 instance
+            const farmV2 = RabbitSponsoredFarmV2.attach(await proxy.getAddress()) as RabbitSponsoredFarm;
 
             // Check that storage values are preserved
             expect(await farmV2.owner()).to.equal(owner.address);
@@ -436,10 +468,13 @@ describe('RabbitSponsoredFarm', () => {
         });
 
         it('should not allow non-owner to upgrade', async () => {
-            const RabbitSponsoredFarmV2 = await ethers.getContractFactory('RabbitSponsoredFarm', user);
+            const RabbitSponsoredFarmV2 = await ethers.getContractFactory('RabbitSponsoredFarm');
+            const implementationV2 = await RabbitSponsoredFarmV2.deploy();
+            await implementationV2.waitForDeployment();
+
             await expect(
-                upgrades.upgradeProxy(await farm.getAddress(), RabbitSponsoredFarmV2)
-            ).to.be.revertedWithCustomError;
+                proxyAdmin.connect(user).upgrade(await proxy.getAddress(), await implementationV2.getAddress())
+            ).to.be.reverted;
         });
     });
 });
