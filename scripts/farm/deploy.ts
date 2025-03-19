@@ -1,6 +1,6 @@
 import { ethers } from 'hardhat';
-import type { RabbitSponsoredFarm, ProxyAdmin } from '../typechain-types';
-import { deploy } from './steps';
+import type { RabbitSponsoredFarm, ProxyAdmin } from '../../typechain-types';
+import { deploy } from '../steps';
 
 export const DEPLOY_SPONSORED_FARM_IMPLEMENTATION = async () => {
   const contractFactory = await ethers.getContractFactory('RabbitSponsoredFarm');

@@ -1,5 +1,5 @@
 import { ethers, run } from 'hardhat';
-import { addressFor } from './metadata';
+import { addressFor } from '../metadata';
 
 async function verifyContracts() {
   // Get NFT manager address based on network
