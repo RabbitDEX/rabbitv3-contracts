@@ -22,6 +22,8 @@ export async function harvestRewards(
   
   // Create a wallet from the private key
   const signerWallet = new ethers.Wallet(signerPrivateKey, ethers.provider);
+
+  const claimedBefore = await sponsoredFarm.positionTotalClaimed(tokenId, farmId)
   
   // Create the signature
   const signature = await createHarvestSignature(
@@ -32,6 +34,8 @@ export async function harvestRewards(
     blockNumber,
     sponsoredFarm
   );
+
+  console.log(`Signature: ${signature}`);
   
   // Prepare the harvest params
   const harvestParams = {
@@ -41,13 +45,16 @@ export async function harvestRewards(
     blockNumber,
     signature
   };
-  
+
+  // Log tuple for using on explorer
+  console.log(`[${tokenId.toString()},${farmId.toString()},${totalClaimable.toString()},${blockNumber.toString()},"${signature}"]`);
+
   // Harvest the rewards
   const tx = await sponsoredFarm.harvest(harvestParams);
   await tx.wait();
   
   console.log(`Rewards harvested successfully for token ID ${tokenId}, farm ID ${farmId}`);
-  console.log(`Amount harvested: ${totalClaimable - await sponsoredFarm.positionTotalClaimed(tokenId, farmId)}`);
+  console.log(`Amount harvested: ${totalClaimable - claimedBefore}`);
 }
 
 async function main() {

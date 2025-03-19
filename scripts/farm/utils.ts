@@ -10,27 +10,27 @@ export const FARM_CONSTANTS = {
     REWARD_TOKEN: '0xBB2Baa333C07bb978c10de0F14d5809cbC82cFE8',
     SIGNER: '0x799cfe204bD0BA4f5dB7aa97069247FaBffbB5d9',
     POOL: '0xC8E762af329FFa942f89f4528092f37323514Cea',
-    REWARD_PER_BLOCK: BigInt(1000000000000000000) // 1 token per block (with 18 decimals)
+    REWARD_PER_BLOCK: BigInt(1000000000000000) // 0.001 token per block (with 18 decimals)
   },
   
   // Stake/Unstake constants
   POSITION: {
-    TOKEN_ID: BigInt(1) // Replace with actual token ID
+    TOKEN_ID: BigInt(87) // Replace with actual token ID
   },
   
   // Harvest constants
   HARVEST: {
-    TOKEN_ID: BigInt(1), // Replace with actual token ID
-    FARM_ID: BigInt(0), // Replace with actual farm ID
-    TOTAL_CLAIMABLE: BigInt(1000000000000000000), // 1 token (with 18 decimals)
-    BLOCK_NUMBER: BigInt(0), // Will be set to current block number in the script
-    SIGNER_PRIVATE_KEY: '0x0000000000000000000000000000000000000000000000000000000000000000' // Replace with actual private key
+    TOKEN_ID: BigInt(87), // Replace with actual token ID
+    FARM_ID: BigInt(2), // Replace with actual farm ID
+    TOTAL_CLAIMABLE: BigInt(2000000000000000), // 0.002 token (with 18 decimals)
+    BLOCK_NUMBER: BigInt(91709463), // Will be set to current block number in the script
+    SIGNER_PRIVATE_KEY: process.env.FARM_SIGNER_PRIVATE_KEY || '0x0000000000000000000000000000000000000000000000000000000000000000' // Replace with actual private key
   },
   
   // Deposit constants
   DEPOSIT: {
-    FARM_ID: BigInt(0), // Replace with actual farm ID
-    AMOUNT: BigInt(1000000000000000000) // 1 token (with 18 decimals)
+    FARM_ID: BigInt(2), // Replace with actual farm ID
+    AMOUNT: BigInt(100000000000000000000) // 100 tokens (with 18 decimals)
   },
   
   // Set signer constants
@@ -41,8 +41,8 @@ export const FARM_CONSTANTS = {
   
   // Set reward per block constants
   SET_REWARD: {
-    FARM_ID: BigInt(0), // Replace with actual farm ID
-    REWARD_PER_BLOCK: BigInt(2000000000000000000) // 2 tokens per block (with 18 decimals)
+    FARM_ID: BigInt(2), // Replace with actual farm ID
+    REWARD_PER_BLOCK: BigInt(1000000000000000) // 0.001 tokens per block (with 18 decimals)
   }
 };
 
