@@ -360,6 +360,142 @@ describe('RabbitSponsoredFarm', () => {
         });
     });
 
+    describe('harvestAndUnstake', () => {
+        const amount = ethers.parseEther('100');
+
+        beforeEach(async () => {
+            await nftManager.setOwner(tokenId, user.address);
+            await farm.connect(user).stake(tokenId);
+            await rewardToken.mint(owner.address, amount);
+            await rewardToken.connect(owner).approve(await farm.getAddress(), amount);
+            await farm.connect(owner).depositReward(farmId, amount);
+        });
+
+        it('should harvest rewards and unstake NFT successfully', async () => {
+            const domain = {
+                name: 'RabbitSponsoredFarm',
+                version: '1',
+                chainId: (await ethers.provider.getNetwork()).chainId,
+                verifyingContract: await farm.getAddress()
+            };
+
+            const types = {
+                Harvest: [
+                    { name: 'tokenId', type: 'uint256' },
+                    { name: 'farmId', type: 'uint256' },
+                    { name: 'totalClaimable', type: 'uint256' },
+                    { name: 'blockNumber', type: 'uint256' }
+                ]
+            };
+
+            const blockNumber = await ethers.provider.getBlockNumber();
+            const value = {
+                tokenId,
+                farmId,
+                totalClaimable: amount,
+                blockNumber
+            };
+
+            const signature = await signer.signTypedData(domain, types, value);
+
+            const balanceBefore = await rewardToken.balanceOf(user.address);
+            await farm.connect(user).harvestAndUnstake({
+                tokenId,
+                farmId,
+                totalClaimable: amount,
+                blockNumber,
+                signature
+            });
+
+            expect(await rewardToken.balanceOf(user.address)).to.equal(balanceBefore + amount);
+            expect(await farm.positionTotalClaimed(tokenId, farmId)).to.equal(amount);
+            expect(await farm.positionOwner(tokenId)).to.equal(ethers.ZeroAddress);
+            expect(await farm.totalStaked()).to.equal(0);
+            expect(await nftManager.ownerOf(tokenId)).to.equal(user.address);
+        });
+
+        it('should not allow harvestAndUnstake by non-owner', async () => {
+            const domain = {
+                name: 'RabbitSponsoredFarm',
+                version: '1',
+                chainId: (await ethers.provider.getNetwork()).chainId,
+                verifyingContract: await farm.getAddress()
+            };
+
+            const types = {
+                Harvest: [
+                    { name: 'tokenId', type: 'uint256' },
+                    { name: 'farmId', type: 'uint256' },
+                    { name: 'totalClaimable', type: 'uint256' },
+                    { name: 'blockNumber', type: 'uint256' }
+                ]
+            };
+
+            const blockNumber = await ethers.provider.getBlockNumber();
+            const value = {
+                tokenId,
+                farmId,
+                totalClaimable: amount,
+                blockNumber
+            };
+
+            const signature = await signer.signTypedData(domain, types, value);
+
+            await expect(farm.connect(owner).harvestAndUnstake({
+                tokenId,
+                farmId,
+                totalClaimable: amount,
+                blockNumber,
+                signature
+            })).to.be.revertedWith('Not owner');
+        });
+
+        it('should emit both RewardHarvested and PositionUnstaked events', async () => {
+            const domain = {
+                name: 'RabbitSponsoredFarm',
+                version: '1',
+                chainId: (await ethers.provider.getNetwork()).chainId,
+                verifyingContract: await farm.getAddress()
+            };
+
+            const types = {
+                Harvest: [
+                    { name: 'tokenId', type: 'uint256' },
+                    { name: 'farmId', type: 'uint256' },
+                    { name: 'totalClaimable', type: 'uint256' },
+                    { name: 'blockNumber', type: 'uint256' }
+                ]
+            };
+
+            const blockNumber = await ethers.provider.getBlockNumber();
+            const value = {
+                tokenId,
+                farmId,
+                totalClaimable: amount,
+                blockNumber
+            };
+
+            const signature = await signer.signTypedData(domain, types, value);
+            const tx = await farm.connect(user).harvestAndUnstake({
+                tokenId,
+                farmId,
+                totalClaimable: amount,
+                blockNumber,
+                signature
+            });
+            const receipt = await tx.wait();
+            const block = await ethers.provider.getBlock(receipt!.blockNumber);
+
+            await expect(tx)
+                .to.emit(farm, 'RewardHarvested')
+                .withArgs(user.address, tokenId, farmId, amount, receipt!.blockNumber, block!.timestamp);
+
+            await expect(tx)
+                .to.emit(farm, 'PositionUnstaked')
+                .withArgs(user.address, tokenId, receipt!.blockNumber, block!.timestamp);
+        });
+    });
+
     describe('depositReward', () => {
         const amount = ethers.parseEther('100');
 

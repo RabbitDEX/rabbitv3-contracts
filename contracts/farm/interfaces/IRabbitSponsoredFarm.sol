@@ -86,6 +86,7 @@ interface IRabbitSponsoredFarm {
     ) external;
     function stake(uint256 tokenId) external;
     function unstake(uint256 tokenId) external;
+    function harvestAndUnstake(HarvestParams calldata params) external;
     function harvest(HarvestParams calldata params) external;
     function depositReward(uint256 farmId, uint256 amount) external;
     function setSigner(uint256 farmId, address _signer) external;

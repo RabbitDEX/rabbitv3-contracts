@@ -14,7 +14,7 @@ async function verifyContracts() {
 
   // Get addresses from metadata
   const proxyAddress = addressFor('RabbitSponsoredFarm_Proxy');
-  const implementationAddress = addressFor('RabbitSponsoredFarm_Implementation');
+  const implementationAddress = addressFor('RabbitSponsoredFarm_Implementation_V2');
   const adminAddress = addressFor('RabbitSponsoredFarm_ProxyAdmin');
 
   // verify proxy address

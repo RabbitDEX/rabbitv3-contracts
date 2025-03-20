@@ -106,28 +106,25 @@ contract RabbitSponsoredFarm is
 
     function unstake(uint256 tokenId) external override nonReentrant {
         require(positionOwner[tokenId] == msg.sender, 'Not owner');
+        _unstake(tokenId, msg.sender);
+    }
 
-        delete positionOwner[tokenId];
-        delete positionLastHarvestBlock[tokenId];
-        totalStaked--;
-
-        nonfungiblePositionManager.transferFrom(
-            address(this),
-            msg.sender,
-            tokenId
-        );
-        emit PositionUnstaked(
-            msg.sender,
-            tokenId,
-            block.number,
-            block.timestamp
-        );
+    function harvestAndUnstake(
+        HarvestParams calldata params
+    ) external override nonReentrant {
+        require(positionOwner[params.tokenId] == msg.sender, 'Not owner');
+        _harvest(params, msg.sender);
+        _unstake(params.tokenId, msg.sender);
     }
 
     function harvest(
         HarvestParams calldata params
     ) external override nonReentrant {
         require(positionOwner[params.tokenId] == msg.sender, 'Not owner');
+        _harvest(params, msg.sender);
+    }
+
+    function _harvest(HarvestParams calldata params, address to) internal {
         require(block.number >= params.blockNumber, 'Block not reached');
         require(
             positionLastHarvestBlock[params.tokenId] <= params.blockNumber,
@@ -167,15 +164,24 @@ contract RabbitSponsoredFarm is
             .totalClaimable;
         _farms[params.farmId].totalClaimed += harvestAmount;
 
-        farm.rewardToken.safeTransfer(msg.sender, harvestAmount);
+        farm.rewardToken.safeTransfer(to, harvestAmount);
         emit RewardHarvested(
-            msg.sender,
+            to,
             params.tokenId,
             params.farmId,
             harvestAmount,
             block.number,
             block.timestamp
         );
+    }
+
+    function _unstake(uint256 tokenId, address to) internal {
+        delete positionOwner[tokenId];
+        delete positionLastHarvestBlock[tokenId];
+        totalStaked--;
+
+        nonfungiblePositionManager.transferFrom(address(this), to, tokenId);
+        emit PositionUnstaked(to, tokenId, block.number, block.timestamp);
     }
 
     function depositReward(

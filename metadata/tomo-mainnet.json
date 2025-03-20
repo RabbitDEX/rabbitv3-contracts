@@ -12,5 +12,6 @@
   "SwapRouter": "0x71eBF8972459B01A50cca14Ed351CF34213Ed742",
   "RabbitSponsoredFarm_Implementation": "0x83ae8C9e32F98f81e320328eBbF88b18A414DD26",
   "RabbitSponsoredFarm_ProxyAdmin": "0x6d9eD147ab9b0E825D51F070BB4C7c103a40149f",
-  "RabbitSponsoredFarm_Proxy": "0xe2B3E58d50632C862d0e8c0a35079967DbCF249d"
+  "RabbitSponsoredFarm_Proxy": "0xe2B3E58d50632C862d0e8c0a35079967DbCF249d",
+  "RabbitSponsoredFarm_Implementation_V2": "0x5Ac34A768EaD8517d9C003B7226d60e58458eCb4"
 }
